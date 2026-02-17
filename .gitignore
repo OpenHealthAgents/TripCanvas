@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Build artifacts
+client/dist/
+
+# Env / secrets
+.env
+*.env
+server/.env
+
+# Logs
+*.log
+server/*.log
+ngrok*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
