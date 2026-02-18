@@ -112,16 +112,15 @@ async def search_flight_offers(origin: str, destination: str, departure_date: st
         print(f"Amadeus Error (Flights): {error}")
         return []
 
-# Serve built React files
-FRONTEND_DIST = Path(__file__).parent.parent / "client" / "dist"
+# Serve raw widget files
+WIDGET_DIR = Path(__file__).parent.parent / "widget"
+
 def build_widget_html() -> str:
-    """Load built index HTML and optionally rewrite asset URLs to an absolute APP_HOST."""
-    index_html_path = FRONTEND_DIST / "index.html"
+    """Load widget HTML and rewrite asset URLs to an absolute APP_HOST when configured."""
+    index_html_path = WIDGET_DIR / "index.html"
     html = index_html_path.read_text(encoding="utf-8")
     host = os.getenv("APP_HOST", "").rstrip("/")
-    if host:
-        html = html.replace('src="./assets/', f'src="{host}/assets/')
-        html = html.replace('href="./assets/', f'href="{host}/assets/')
+    html = html.replace("__WIDGET_HOST__", host)
     return html
 
 def build_widget_meta() -> dict:
@@ -159,7 +158,7 @@ async def list_resources() -> List[types.Resource]:
 @mcp_server.read_resource()
 async def read_resource(uri: str) -> types.TextResourceContents | types.BlobResourceContents:
     if uri == "ui://widget/trip-plan.html":
-        index_html_path = FRONTEND_DIST / "index.html"
+        index_html_path = WIDGET_DIR / "index.html"
         if index_html_path.exists():
             html = build_widget_html()
             
@@ -376,9 +375,9 @@ async def handle_mcp_sse(request: Request):
 # Mount the message endpoint directly as an ASGI app to avoid FastAPI sending a second response.
 app.mount("/messages", transport.handle_post_message)
 
-# Serve built React files (for assets like CSS/JS)
-if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST, html=True), name="assets")
+# Serve raw widget assets (CSS/JS)
+if WIDGET_DIR.exists():
+    app.mount("/widget", StaticFiles(directory=WIDGET_DIR, html=True), name="widget")
 
 if __name__ == "__main__":
     import uvicorn

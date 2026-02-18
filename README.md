@@ -10,17 +10,7 @@ This project demonstrates a ChatGPT Native App using the OpenAI Apps SDK and Mod
 
 ## Setup & Running
 
-### 1. Build the Frontend
-Navigate to the client directory, install dependencies, and build the static assets.
-
-```bash
-cd client
-npm install
-npm run build
-cd ..
-```
-
-### 2. Start the MCP Server
+### 1. Start the MCP Server
 Navigate to the server directory, create a virtual environment, and start the server.
 
 ```bash
@@ -32,7 +22,7 @@ python main.py
 ```
 The server will be running at `http://localhost:8000`.
 
-### 3. Expose to the Internet
+### 2. Expose to the Internet
 Open a new terminal and use ngrok to create a public tunnel.
 
 ```bash
@@ -40,14 +30,14 @@ ngrok http 8000
 ```
 Copy the public URL (e.g., `https://abc-123.ngrok-free.app`).
 
-### 4. Update the Server URL
-In `server/main.py`, update the `host` variable with your ngrok URL:
-```python
-host = "https://abc-123.ngrok-free.app"
+### 3. Update the Server URL
+Set environment variable with your public URL:
+```bash
+export APP_HOST="https://abc-123.ngrok-free.app"
 ```
-Restart the Python server.
+Restart the Python server after setting this.
 
-### 5. Configure ChatGPT
+### 4. Configure ChatGPT
 1. Go to **ChatGPT > Explore GPTs > Create > Configure**.
 2. Scroll to **Actions** and click **Create New Action**.
 3. Set the **Import from URL** to your ngrok URL + `/mcp/openapi.json` (if using FastAPI's auto-generated docs) or manually define the Action to point to your MCP endpoint.
