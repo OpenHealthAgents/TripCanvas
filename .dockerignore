@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules
+client/node_modules
+server/.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+ngrok*.log
+server/.env

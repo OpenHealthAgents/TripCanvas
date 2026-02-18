@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: tripcanvas-mcp
+    env: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      - key: AMADEUS_API_KEY
+        sync: false
+      - key: AMADEUS_API_SECRET
+        sync: false
+      - key: APP_HOST
+        sync: false

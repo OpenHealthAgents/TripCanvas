@@ -351,6 +351,10 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="TripCanvas", lifespan=lifespan)
 transport = SseServerTransport("/messages")
 
+@app.get("/healthz")
+async def healthz():
+    return {"ok": True}
+
 class StreamableHTTPASGIApp:
     async def __call__(self, scope, receive, send) -> None:
         await streamable_session_manager.handle_request(scope, receive, send)
@@ -378,4 +382,4 @@ if FRONTEND_DIST.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

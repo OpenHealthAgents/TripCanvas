@@ -58,3 +58,18 @@ Restart the Python server.
 2. **Tool Call:** ChatGPT calls `plan_trip` (with destination, origin, date), `search_flights`, or `search_activities` on your MCP server.
 3. **Response:** The server returns trip data and a `widget_url` (for plans) or text info (for flights/activities).
 4. **Rendering:** ChatGPT embeds the `widget_url` (your React app) directly in the chat interface.
+
+## Deploy on Render (Recommended)
+This avoids ngrok browser warning pages that block ChatGPT widget rendering.
+
+1. Push this repo to GitHub (already done).
+2. In Render, create a new **Web Service** from this repo.
+3. Render will detect `render.yaml` and deploy the Docker service.
+4. In Render service settings, set env vars:
+   - `AMADEUS_API_KEY`
+   - `AMADEUS_API_SECRET`
+   - `APP_HOST` = your Render service URL, e.g. `https://tripcanvas-mcp.onrender.com`
+5. Redeploy after setting env vars.
+
+Use this MCP endpoint in ChatGPT:
+- `https://<your-render-domain>/mcp`
