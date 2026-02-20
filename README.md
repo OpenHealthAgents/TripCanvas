@@ -1,6 +1,10 @@
 # TripCanvas - ChatGPT Native App
 
-This project demonstrates a ChatGPT Native App using the OpenAI Apps SDK and Model Context Protocol (MCP).
+TripCanvas provides:
+- MCP endpoints for ChatGPT-native tool use and widget rendering.
+- REST v1 travel endpoints for direct API integration.
+
+Both MCP tools and REST endpoints share the same backend orchestration path.
 
 ## Prerequisites
 
@@ -8,21 +12,40 @@ This project demonstrates a ChatGPT Native App using the OpenAI Apps SDK and Mod
 - Python (v3.10+)
 - `ngrok` (for local development access)
 
-## Setup & Running
+## Setup & Running (Local)
 
-### 1. Start the MCP Server
-Navigate to the server directory, create a virtual environment, and start the server.
+### 1. Start the backend server
+Navigate to the server directory, create a virtual environment, install dependencies, and start the server.
 
 ```bash
 cd server
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
 The server will be running at `http://localhost:8000`.
 
-### 2. Expose to the Internet
+### 2. Verify local endpoints
+```bash
+curl http://localhost:8000/healthz
+curl http://localhost:8000/openapi.json
+```
+
+### 3. Test REST v1 API
+Example:
+```bash
+curl -X POST http://localhost:8000/v1/search_travel \
+  -H "Content-Type: application/json" \
+  -d '{
+    "origin": {"iata":"LON","city":"London"},
+    "destination": {"iata":"PAR","city":"Paris"},
+    "dates": {"start_date":"2026-04-10","end_date":"2026-04-13"},
+    "travelers": {"adults":1}
+  }'
+```
+
+### 4. Expose to the Internet (optional for local dev)
 Open a new terminal and use ngrok to create a public tunnel.
 
 ```bash
@@ -30,24 +53,32 @@ ngrok http 8000
 ```
 Copy the public URL (e.g., `https://abc-123.ngrok-free.app`).
 
-### 3. Update the Server URL
+### 5. Set widget host for MCP/widget assets
 Set environment variable with your public URL:
 ```bash
 export APP_HOST="https://abc-123.ngrok-free.app"
 ```
 Restart the Python server after setting this.
 
-### 4. Configure ChatGPT
+### 6. Configure ChatGPT
 1. Go to **ChatGPT > Explore GPTs > Create > Configure**.
 2. Scroll to **Actions** and click **Create New Action**.
-3. Set the **Import from URL** to your ngrok URL + `/mcp/openapi.json` (if using FastAPI's auto-generated docs) or manually define the Action to point to your MCP endpoint.
+3. Point to your MCP endpoint: `https://<your-host>/mcp`.
 4. *Note:* For the Apps SDK "Native" experience, you will typically register this as an **MCP Connector** in the OpenAI Developer Portal.
 
 ## How it Works
 1. **Trigger:** The user asks for a trip plan, flights, or activities.
 2. **Tool Call:** ChatGPT calls `plan_trip` (with destination, origin, date), `search_flights`, or `search_activities` on your MCP server.
-3. **Response:** The server returns trip data and a `widget_url` (for plans) or text info (for flights/activities).
-4. **Rendering:** ChatGPT embeds the `widget_url` (your React app) directly in the chat interface.
+3. **Orchestration:** MCP tools internally call the same v1 orchestration handlers used by REST.
+4. **Response:** The server returns trip data (plus structured content for widget rendering).
+5. **Rendering:** ChatGPT renders the widget in the chat interface.
+
+## REST v1 Endpoints
+- `POST /v1/search_travel`
+- `POST /v1/refine_results`
+- `POST /v1/start_booking`
+- `POST /v1/save_itinerary`
+- `GET /v1/get_policy_summary/{offer_id}`
 
 ## Deploy on Render (Recommended)
 This avoids ngrok browser warning pages that block ChatGPT widget rendering.
@@ -63,3 +94,6 @@ This avoids ngrok browser warning pages that block ChatGPT widget rendering.
 
 Use this MCP endpoint in ChatGPT:
 - `https://<your-render-domain>/mcp`
+
+Use this REST base URL for integrations:
+- `https://www.api.tripcanvas.site`
