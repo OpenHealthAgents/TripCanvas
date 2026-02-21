@@ -389,23 +389,21 @@ def build_widget_html() -> str:
     index_html_path = WIDGET_DIR / "index.html"
     html = index_html_path.read_text(encoding="utf-8")
     host = os.getenv("APP_HOST", "").rstrip("/")
-    html = html.replace("__WIDGET_HOST__", host)
 
-    # Inline CSS/JS for maximum ChatGPT widget compatibility when external asset fetches are restricted.
+    # Inline CSS/JS for maximum ChatGPT widget compatibility and to avoid stale external asset caching.
     styles_path = WIDGET_DIR / "styles.css"
     script_path = WIDGET_DIR / "script.js"
     if styles_path.exists():
         styles = styles_path.read_text(encoding="utf-8")
-        html = html.replace(
-            '<link rel="stylesheet" href="__WIDGET_HOST__/widget/styles.css" />',
-            f"<style>{styles}</style>",
-        )
+        html = html.replace('<link rel="stylesheet" href="__WIDGET_HOST__/widget/styles.css" />', f"<style>{styles}</style>")
+        if host:
+            html = html.replace(f'<link rel="stylesheet" href="{host}/widget/styles.css" />', f"<style>{styles}</style>")
     if script_path.exists():
         script = script_path.read_text(encoding="utf-8")
-        html = html.replace(
-            '<script src="__WIDGET_HOST__/widget/script.js"></script>',
-            f"<script>{script}</script>",
-        )
+        html = html.replace('<script src="__WIDGET_HOST__/widget/script.js"></script>', f"<script>{script}</script>")
+        if host:
+            html = html.replace(f'<script src="{host}/widget/script.js"></script>', f"<script>{script}</script>")
+    html = html.replace("__WIDGET_HOST__", host)
     return html
 
 def build_widget_meta() -> dict:
