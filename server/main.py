@@ -389,6 +389,22 @@ def build_widget_html() -> str:
     html = index_html_path.read_text(encoding="utf-8")
     host = os.getenv("APP_HOST", "").rstrip("/")
     html = html.replace("__WIDGET_HOST__", host)
+
+    # Inline CSS/JS for maximum ChatGPT widget compatibility when external asset fetches are restricted.
+    styles_path = WIDGET_DIR / "styles.css"
+    script_path = WIDGET_DIR / "script.js"
+    if styles_path.exists():
+        styles = styles_path.read_text(encoding="utf-8")
+        html = html.replace(
+            '<link rel="stylesheet" href="__WIDGET_HOST__/widget/styles.css" />',
+            f"<style>{styles}</style>",
+        )
+    if script_path.exists():
+        script = script_path.read_text(encoding="utf-8")
+        html = html.replace(
+            '<script src="__WIDGET_HOST__/widget/script.js"></script>',
+            f"<script>{script}</script>",
+        )
     return html
 
 def build_widget_meta() -> dict:
@@ -434,6 +450,7 @@ async def read_resource(uri: str) -> types.TextResourceContents | types.BlobReso
     if uri == "ui://widget/trip-plan.html":
         index_html_path = WIDGET_DIR / "index.html"
         if index_html_path.exists():
+            print("read_resource uri=ui://widget/trip-plan.html")
             html = build_widget_html()
             
             return types.TextResourceContents(
