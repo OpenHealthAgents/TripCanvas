@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 import mcp.types as types
 from starlette.responses import Response
 from dotenv import load_dotenv
@@ -446,14 +447,20 @@ async def list_resources() -> List[types.Resource]:
     ]
 
 @mcp_server.read_resource()
-async def read_resource(uri: str) -> str:
+async def read_resource(uri: str):
     requested_uri = str(uri)
     normalized_uri = requested_uri.rstrip("/")
     print(f"read_resource requested_uri={requested_uri!r} normalized_uri={normalized_uri!r}")
     if normalized_uri == "ui://widget/trip-plan.html":
         index_html_path = WIDGET_DIR / "index.html"
         if index_html_path.exists():
-            return build_widget_html()
+            return [
+                ReadResourceContents(
+                    content=build_widget_html(),
+                    mime_type="text/html",
+                    meta=build_widget_meta(),
+                )
+            ]
         print(f"read_resource missing_widget_file path={index_html_path}")
     raise ValueError(f"Resource not found: {requested_uri}")
 
