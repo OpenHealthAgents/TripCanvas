@@ -26,8 +26,27 @@
     }
 
     var destination = data.destination || "Trip";
+    var flights = Array.isArray(data.flights) ? data.flights : [];
     var hotels = Array.isArray(data.hotels) ? data.hotels : [];
     var itinerary = Array.isArray(data.itinerary) ? data.itinerary : [];
+    var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+
+    var flightsHtml = flights
+      .map(function (flight) {
+        return (
+          '<article class="flight">' +
+          '<div class="flight-main">' +
+          '<p class="flight-route">' + (flight.route || "Route unavailable") + "</p>" +
+          '<p class="flight-meta-line">' + (flight.carrier || "Carrier unavailable") + "</p>" +
+          "</div>" +
+          '<div class="flight-side">' +
+          '<p class="flight-price">' + (flight.price || "") + "</p>" +
+          '<p class="flight-meta-line">' + (flight.refundable ? "Refundable" : "Non-refundable") + "</p>" +
+          "</div>" +
+          "</article>"
+        );
+      })
+      .join("");
 
     var hotelsHtml = hotels
       .map(function (hotel) {
@@ -61,17 +80,29 @@
       })
       .join("");
 
+    var warningsHtml = warnings
+      .map(function (w) {
+        return '<li>' + w + "</li>";
+      })
+      .join("");
+
     root.innerHTML =
       '<div class="card">' +
       '<header class="header">' +
       "<h1>" + destination + "</h1>" +
-      '<div class="meta">' + itinerary.length + " Days • " + hotels.length + " Hotels</div>" +
+      '<div class="meta">' + itinerary.length + " Days • " + flights.length + " Flights • " + hotels.length + " Hotels</div>" +
       "</header>" +
+      '<section class="section"><h2>Best Flights</h2><div class="flights">' +
+      (flightsHtml || '<div class="empty">No flights found.</div>') +
+      "</div></section>" +
       '<section class="section"><h2>Recommended Hotels</h2><div class="hotels">' +
       (hotelsHtml || '<div class="empty">No hotels found.</div>') +
       "</div></section>" +
       '<section class="section"><h2>Daily Itinerary</h2>' +
       (daysHtml || '<div class="empty">No itinerary found.</div>') +
+      "</section>" +
+      '<section class="section"><h2>Notes</h2>' +
+      (warningsHtml ? ('<ul class="warnings">' + warningsHtml + "</ul>") : '<div class="empty">No warnings.</div>') +
       "</section>" +
       '<div class="footer"><button class="btn" id="book-btn">Book This Trip</button></div>' +
       "</div>";

@@ -571,6 +571,22 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         search_response = await search_travel(request)
         flights = search_response.flights
         tool_warnings = list(search_response.warnings)
+        flight_cards = []
+        for flight in flights[:3]:
+            first_segment = flight.segments[0] if flight.segments else None
+            if not first_segment:
+                continue
+            route = f"{first_segment.from_} -> {first_segment.to}"
+            flight_cards.append(
+                {
+                    "route": route,
+                    "carrier": first_segment.carrier,
+                    "depart_at": first_segment.depart_at,
+                    "arrive_at": first_segment.arrive_at,
+                    "price": f"{flight.total_price.currency} {flight.total_price.amount:,.0f}",
+                    "refundable": flight.refundable,
+                }
+            )
 
         hotels = []
         for hotel_offer in search_response.hotels:
@@ -623,6 +639,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
 
         trip_data = {
             "destination": destination_name,
+            "flights": flight_cards,
             "hotels": hotels,
             "itinerary": itinerary,
             "request_id": search_response.request_id,
