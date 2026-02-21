@@ -462,13 +462,7 @@ async def list_tools() -> List[types.Tool]:
                 "required": ["destination"],
             },
             _meta={
-                "openai/outputTemplate": "ui://widget/trip-plan.html",
-                "openai/widgetAccessible": True,
-                "openai/widgetHasImages": True,  # Enable image rendering
-                "openai/widgetCSP": {
-                    "img_src": ["self", "https:", "data:"],
-                    "resource_domains": ["https://images.unsplash.com"],
-                },
+                **build_widget_meta(),
             },
             annotations={
                 "destructiveHint": False,
