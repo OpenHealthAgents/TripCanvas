@@ -440,7 +440,7 @@ async def list_resources() -> List[types.Resource]:
         types.Resource(
             uri="ui://widget/trip-plan.html",
             name="Trip Plan Widget",
-            mimeType="text/html",
+            mimeType="text/html+skybridge",
             description="The interactive UI for the travel planner",
             _meta=build_widget_meta()
         )
@@ -457,7 +457,7 @@ async def read_resource(uri: str):
             return [
                 ReadResourceContents(
                     content=build_widget_html(),
-                    mime_type="text/html",
+                    mime_type="text/html+skybridge",
                     meta=build_widget_meta(),
                 )
             ]
