@@ -201,10 +201,16 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
     if not amadeus:
         return []
     try:
+        # Amadeus requires check-out strictly after check-in.
+        check_in = datetime.strptime(check_in_date, "%Y-%m-%d").date()
+        check_out = datetime.strptime(check_out_date, "%Y-%m-%d").date()
+        if check_out <= check_in:
+            check_out = check_in + timedelta(days=1)
+
         response = amadeus.shopping.hotel_offers_search.get(
             cityCode=city_code,
-            checkInDate=check_in_date,
-            checkOutDate=check_out_date,
+            checkInDate=check_in.isoformat(),
+            checkOutDate=check_out.isoformat(),
             adults=max(1, adults),
             roomQuantity=1,
             bestRateOnly=True,
