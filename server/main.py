@@ -540,11 +540,19 @@ async def lifespan(_app: FastAPI):
         yield
 
 
+def _openapi_server_url() -> str:
+    return (
+        os.getenv("APP_HOST", "").rstrip("/")
+        or os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+        or "http://localhost:8000"
+    )
+
+
 app = FastAPI(
     title="TripCanvas",
     version="1.0.0",
     lifespan=lifespan,
-    servers=[{"url": "https://www.api.tripcanvas.site"}],
+    servers=[{"url": _openapi_server_url()}],
 )
 
 search_store: Dict[str, SearchResponse] = {}
