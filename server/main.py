@@ -240,28 +240,10 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
         check_out = check_in + timedelta(days=1)
 
     try:
-        response = amadeus.shopping.hotel_offers_search.get(
-            cityCode=city_code,
-            checkInDate=check_in.isoformat(),
-            checkOutDate=check_out.isoformat(),
-            adults=max(1, adults),
-            roomQuantity=1,
-            bestRateOnly=True,
-            view="FULL",
-        )
-        return _format_hotel_offers(response.data)
-    except ResponseError as city_error:
-        city_details = getattr(getattr(city_error, "response", None), "result", None)
-        print(
-            "Amadeus Error (Hotels city search): "
-            f"cityCode={city_code} checkIn={check_in.isoformat()} checkOut={check_out.isoformat()} "
-            f"error={city_error} details={city_details}"
-        )
-
-    try:
         hotel_ref = amadeus.reference_data.locations.hotels.by_city.get(cityCode=city_code)
         hotel_ids = [h.get("hotelId") for h in hotel_ref.data if h.get("hotelId")]
         if not hotel_ids:
+            print(f"Amadeus Error (Hotels): no hotelIds found for cityCode={city_code}")
             return []
         response = amadeus.shopping.hotel_offers_search.get(
             hotelIds=",".join(hotel_ids[:20]),
@@ -276,7 +258,7 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
     except ResponseError as fallback_error:
         fallback_details = getattr(getattr(fallback_error, "response", None), "result", None)
         print(
-            "Amadeus Error (Hotels hotelIds fallback): "
+            "Amadeus Error (Hotels hotelIds search): "
             f"cityCode={city_code} checkIn={check_in.isoformat()} checkOut={check_out.isoformat()} "
             f"error={fallback_error} details={fallback_details}"
         )
