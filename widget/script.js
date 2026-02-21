@@ -13,6 +13,8 @@
   function normalizeData(value) {
     if (!value) return null;
     if (value.structuredContent) return value.structuredContent;
+    if (value.structured_content) return value.structured_content;
+    if (value.output && value.output.structuredContent) return value.output.structuredContent;
     return value;
   }
 
@@ -140,6 +142,16 @@
 
   var initial = normalizeData(window.openai && window.openai.toolOutput) || normalizeData(fromUrlParam());
   render(initial);
+
+  // React to host global updates (official Apps SDK pattern).
+  window.addEventListener("openai:set_globals", function (event) {
+    var globals = event && event.detail && event.detail.globals;
+    if (!globals || globals.toolOutput === undefined) return;
+    var next = normalizeData(globals.toolOutput);
+    if (next) {
+      render(next);
+    }
+  });
 
   // Fallback for delayed bridge injection.
   var attempts = 0;
