@@ -594,8 +594,12 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 activity_pool.append(activity.title)
         if not activity_pool:
             activity_pool = _fallback_activities_for_city(destination_name)
+            tool_warnings = [
+                w for w in tool_warnings
+                if w != "No live activities were returned from Amadeus for this query."
+            ]
             tool_warnings.append(
-                f"Using curated fallback activities for {destination_name} because live activities were unavailable."
+                f"Live activities were unavailable, so curated fallback activities are shown for {destination_name}."
             )
 
         cursor = 0
