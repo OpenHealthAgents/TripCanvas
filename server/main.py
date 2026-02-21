@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -189,24 +189,53 @@ class SaveItineraryRequest(BaseModel):
 class SaveItineraryResponse(BaseModel):
     itinerary_id: str
 
-async def get_hotels(city_code: str):
-    """Fetch real hotels from Amadeus API."""
+def _as_float(value: Any, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, adults: int = 1):
+    """Fetch hotel offers from Amadeus API."""
     if not amadeus:
         return []
     try:
-        # Search hotels in the city
-        response = amadeus.reference_data.locations.hotels.by_city.get(cityCode=city_code)
-        hotel_list = response.data[:3]  # Get top 3
-        
-        formatted_hotels = []
-        for hotel in hotel_list:
-            formatted_hotels.append({
-                "name": hotel.get('name', 'Unknown Hotel').title(),
-                "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400", 
-                "price": "Check for rates",
-                "rating": "4.5"
-            })
-        return formatted_hotels
+        response = amadeus.shopping.hotel_offers_search.get(
+            cityCode=city_code,
+            checkInDate=check_in_date,
+            checkOutDate=check_out_date,
+            adults=max(1, adults),
+            roomQuantity=1,
+            bestRateOnly=True,
+            view="FULL",
+        )
+        offers = []
+        for hotel_offer in response.data[:5]:
+            hotel_info = hotel_offer.get("hotel", {})
+            offer_list = hotel_offer.get("offers", [])
+            best_offer = offer_list[0] if offer_list else {}
+            price_info = best_offer.get("price", {})
+            avg_price_info = price_info.get("variations", {}).get("average", {})
+            total = _as_float(price_info.get("total"))
+            currency = (price_info.get("currency") or "USD").upper()
+            nightly = _as_float(avg_price_info.get("base"), fallback=0.0)
+
+            offers.append(
+                {
+                    "name": hotel_info.get("name") or "Unknown Hotel",
+                    "total_amount": total,
+                    "nightly_amount": nightly if nightly > 0 else None,
+                    "currency": currency,
+                    "rating": _as_float(hotel_info.get("rating"), fallback=0.0),
+                    "latitude": hotel_info.get("latitude"),
+                    "longitude": hotel_info.get("longitude"),
+                    "amenities": hotel_info.get("amenities", [])[:8],
+                    "cancellation": (best_offer.get("policies", {}).get("cancellation", {}).get("description", {}).get("text")),
+                    "booking_url": best_offer.get("self"),
+                }
+            )
+        return offers
     except ResponseError as error:
         print(f"Amadeus Error (Hotels): {error}")
         return []
@@ -216,10 +245,29 @@ async def get_activities(latitude: float, longitude: float):
     if not amadeus:
         return []
     try:
-        response = amadeus.shopping.activities.get(
-            latitude=latitude, longitude=longitude
-        )
-        return [activity.get('name') for activity in response.data[:5]]
+        response = amadeus.shopping.activities.get(latitude=latitude, longitude=longitude)
+        activities = []
+        for activity in response.data[:8]:
+            price_info = activity.get("price", {})
+            geo_code = activity.get("geoCode", {})
+            booking_link = (
+                activity.get("bookingLink")
+                or activity.get("self", {}).get("href")
+                or activity.get("self")
+            )
+            activities.append(
+                {
+                    "title": activity.get("name") or "Local activity",
+                    "amount": _as_float(price_info.get("amount"), fallback=0.0),
+                    "currency": (price_info.get("currencyCode") or "USD").upper(),
+                    "booking_url": booking_link,
+                    "rating": _as_float(activity.get("rating"), fallback=0.0),
+                    "description": activity.get("shortDescription"),
+                    "latitude": geo_code.get("latitude"),
+                    "longitude": geo_code.get("longitude"),
+                }
+            )
+        return activities
     except ResponseError as error:
         print(f"Amadeus Error (Activities): {error}")
         return []
@@ -259,13 +307,46 @@ async def search_flight_offers(origin: str, destination: str, departure_date: st
         )
         offers = []
         for offer in response.data[:3]:
-            price = offer.get('price', {}).get('total')
-            currency = offer.get('price', {}).get('currency')
-            itineraries = offer.get('itineraries', [])
-            if itineraries:
-                segments = itineraries[0].get('segments', [])
-                carrier = segments[0].get('carrierCode') if segments else "Unknown"
-                offers.append(f"Flight by {carrier}: {price} {currency}")
+            price_info = offer.get("price", {})
+            itineraries = offer.get("itineraries", [])
+            first_itinerary = itineraries[0] if itineraries else {}
+            raw_segments = first_itinerary.get("segments", [])
+            segments = []
+            for segment in raw_segments:
+                dep = segment.get("departure", {})
+                arr = segment.get("arrival", {})
+                segments.append(
+                    {
+                        "from": dep.get("iataCode", origin),
+                        "to": arr.get("iataCode", destination),
+                        "depart_at": dep.get("at", f"{departure_date}T09:00:00"),
+                        "arrive_at": arr.get("at", f"{departure_date}T12:00:00"),
+                        "carrier": segment.get("carrierCode", "Unknown"),
+                        "flight_number": segment.get("number"),
+                    }
+                )
+
+            if not segments:
+                segments = [
+                    {
+                        "from": origin,
+                        "to": destination,
+                        "depart_at": f"{departure_date}T09:00:00",
+                        "arrive_at": f"{departure_date}T12:00:00",
+                        "carrier": "Unknown",
+                        "flight_number": None,
+                    }
+                ]
+
+            offers.append(
+                {
+                    "price_total": _as_float(price_info.get("total"), fallback=0.0),
+                    "currency": (price_info.get("currency") or "USD").upper(),
+                    "segments": segments,
+                    "refundable": offer.get("pricingOptions", {}).get("refundableFare"),
+                    "fare_rules_summary": "Live fare from Amadeus",
+                }
+            )
         return offers
     except ResponseError as error:
         print(f"Amadeus Error (Flights): {error}")
@@ -473,26 +554,24 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 }
             )
 
-        # Generate Itinerary with real activities
+        # Generate itinerary from real activities, with unique fallbacks when supply is low.
         itinerary = []
-        activity_pool = [activity.title for activity in search_response.activities]
-        
-        # If no real activities found, use generic ones
-        if not activity_pool:
-            activity_pool = [f"Explore {destination_name} center", "Visit local museum", "Walk in the park", "City tour", "Shopping district"]
+        activity_pool: List[str] = []
+        for activity in search_response.activities:
+            if activity.title not in activity_pool:
+                activity_pool.append(activity.title)
 
-        # Ensure we have enough activities for the days
-        while len(activity_pool) < days * 2:
-            activity_pool.append(f"Discover hidden gems in {destination_name}")
-
+        cursor = 0
         for i in range(1, days + 1):
             day_activities = []
-            # Pick 2 activities per day
-            if len(activity_pool) >= 2:
-                day_activities.append(activity_pool.pop(0))
-                day_activities.append(activity_pool.pop(0))
-            else:
-                 day_activities.append(f"Explore {destination_name}")
+            for slot in range(2):
+                if cursor < len(activity_pool):
+                    day_activities.append(activity_pool[cursor])
+                    cursor += 1
+                else:
+                    day_activities.append(
+                        f"Self-guided exploration in {destination_name} (Day {i}, stop {slot + 1})"
+                    )
 
             day_activities.append("Dinner at a local restaurant")
             
@@ -608,6 +687,8 @@ async def search_travel(request: TripRequest):
     request_id = str(uuid4())
     destination_iata = _safe_iata(request.destination, "PAR")
     origin_iata = _safe_iata(request.origin, "LON")
+    destination_name = request.destination.city or destination_iata
+    warnings: List[str] = []
 
     flights_raw = await search_flight_offers(
         origin_iata,
@@ -615,62 +696,95 @@ async def search_travel(request: TripRequest):
         request.dates.start_date,
     )
     flights: List[FlightOffer] = []
-    for idx, flight in enumerate(flights_raw):
+    for idx, offer in enumerate(flights_raw):
         flights.append(
             FlightOffer(
                 id=f"flight_{request_id}_{idx}",
                 provider="amadeus",
-                total_price=Money(amount=0.0, currency="USD"),
-                segments=[
-                    Segment(
-                        **{
-                            "from": origin_iata,
-                            "to": destination_iata,
-                            "depart_at": f"{request.dates.start_date}T09:00:00Z",
-                            "arrive_at": f"{request.dates.start_date}T12:00:00Z",
-                            "carrier": "Unknown",
-                            "flight_number": None,
-                        }
-                    )
-                ],
-                fare_rules_summary=flight,
+                total_price=Money(
+                    amount=offer["price_total"],
+                    currency=offer["currency"],
+                ),
+                segments=[Segment(**segment) for segment in offer["segments"]],
+                fare_rules_summary=offer["fare_rules_summary"],
+                refundable=offer["refundable"],
                 booking_mode="redirect",
-                score=max(1.0, 100.0 - idx * 5),
+                score=max(1.0, 95.0 - idx * 5),
             )
         )
+    if not flights:
+        warnings.append("No live flight offers were returned from Amadeus for this query.")
 
-    hotels = [
-        HotelOffer(
-            id=f"hotel_{request_id}_0",
-            provider="expedia_rapid",
-            hotel_name=f"{request.destination.city or destination_iata} Central Hotel",
-            star_rating=4.3,
-            total_price=Money(amount=850.0, currency="USD"),
-            nightly_price=Money(amount=170.0, currency="USD"),
-            cancellation_policy_summary="Free cancellation up to 24h before check-in.",
-            refundable=True,
-            location=HotelLocation(lat=request.destination.lat, lng=request.destination.lng, area="City Center"),
-            amenities=["wifi", "breakfast", "gym"],
-            booking_url="https://www.tripcanvas.site",
-            score=91.0,
+    hotels_raw = await get_hotels(
+        city_code=destination_iata,
+        check_in_date=request.dates.start_date,
+        check_out_date=request.dates.end_date,
+        adults=request.travelers.adults,
+    )
+    hotels: List[HotelOffer] = []
+    for idx, hotel in enumerate(hotels_raw):
+        star_rating = hotel["rating"] if hotel["rating"] > 0 else None
+        total_amount = hotel["total_amount"]
+        nightly_amount = hotel["nightly_amount"]
+        hotels.append(
+            HotelOffer(
+                id=f"hotel_{request_id}_{idx}",
+                provider="expedia_rapid",
+                hotel_name=hotel["name"],
+                star_rating=star_rating,
+                total_price=Money(amount=total_amount, currency=hotel["currency"]),
+                nightly_price=(
+                    Money(amount=nightly_amount, currency=hotel["currency"])
+                    if nightly_amount is not None
+                    else None
+                ),
+                cancellation_policy_summary=hotel["cancellation"],
+                refundable=bool(hotel["cancellation"]),
+                location=HotelLocation(
+                    lat=hotel["latitude"],
+                    lng=hotel["longitude"],
+                    area=destination_name,
+                ),
+                amenities=hotel["amenities"],
+                booking_url=hotel["booking_url"],
+                score=(star_rating * 20.0) if star_rating else max(1.0, 88.0 - idx * 4),
+            )
         )
-    ]
+    if not hotels:
+        warnings.append("No live hotel offers were returned from Amadeus for this query.")
 
-    activities = [
-        ActivityOffer(
-            id=f"activity_{request_id}_0",
-            provider="viator",
-            title=f"{request.destination.city or destination_iata} City Highlights Tour",
-            duration_minutes=180,
-            total_price=Money(amount=59.0, currency="USD"),
-            rating=4.6,
-            rating_count=1200,
-            cancellation_policy_summary="Free cancellation up to 24h before activity.",
-            meeting_point="Central square",
-            booking_url="https://www.tripcanvas.site",
-            score=89.0,
+    latitude = request.destination.lat
+    longitude = request.destination.lng
+    if latitude is None or longitude is None:
+        location = await get_location(destination_name)
+        if location:
+            latitude = location.get("latitude")
+            longitude = location.get("longitude")
+
+    activities_raw = []
+    if latitude is not None and longitude is not None:
+        activities_raw = await get_activities(latitude, longitude)
+
+    activities: List[ActivityOffer] = []
+    for idx, activity in enumerate(activities_raw):
+        rating = activity["rating"] if activity["rating"] > 0 else None
+        activities.append(
+            ActivityOffer(
+                id=f"activity_{request_id}_{idx}",
+                provider="viator",
+                title=activity["title"],
+                duration_minutes=None,
+                total_price=Money(amount=activity["amount"], currency=activity["currency"]),
+                rating=rating,
+                rating_count=None,
+                cancellation_policy_summary=activity["description"],
+                meeting_point=destination_name,
+                booking_url=activity["booking_url"],
+                score=(rating * 20.0) if rating else max(1.0, 86.0 - idx * 3),
+            )
         )
-    ]
+    if not activities:
+        warnings.append("No live activities were returned from Amadeus for this query.")
 
     response = SearchResponse(
         request_id=request_id,
@@ -678,7 +792,7 @@ async def search_travel(request: TripRequest):
         flights=flights,
         hotels=hotels,
         activities=activities,
-        warnings=[] if flights else ["No live flight offers were returned from provider for this query."],
+        warnings=warnings,
     )
     search_store[request_id] = response
     return response
