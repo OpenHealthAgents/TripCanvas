@@ -583,6 +583,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 first_segment.depart_at,
                 last_segment.arrive_at if last_segment else first_segment.arrive_at,
             )
+            air_time = _flight_air_time(flight.segments)
             if flight.refundable is True:
                 refundable_status = "Refundable"
             elif flight.refundable is False:
@@ -597,7 +598,8 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                     "arrive_at": last_segment.arrive_at if last_segment else first_segment.arrive_at,
                     "price": f"{flight.total_price.currency} {flight.total_price.amount:,.0f}",
                     "stops": stop_count,
-                    "duration": duration,
+                    "journey_duration": duration,
+                    "air_time": air_time,
                     "refundable_status": refundable_status,
                 }
             )
@@ -826,6 +828,29 @@ def _format_duration(depart_at: str, arrive_at: str) -> Optional[str]:
     hours = total_minutes // 60
     minutes = total_minutes % 60
     return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+
+
+def _format_minutes(total_minutes: int) -> str:
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+
+
+def _flight_air_time(segments: List[Segment]) -> Optional[str]:
+    if not segments:
+        return None
+    minutes_total = 0
+    for segment in segments:
+        depart_dt = _parse_iso_datetime(segment.depart_at)
+        arrive_dt = _parse_iso_datetime(segment.arrive_at)
+        if not depart_dt or not arrive_dt:
+            continue
+        seg_minutes = int((arrive_dt - depart_dt).total_seconds() // 60)
+        if seg_minutes > 0:
+            minutes_total += seg_minutes
+    if minutes_total <= 0:
+        return None
+    return _format_minutes(minutes_total)
 
 
 def default_departure_date() -> str:

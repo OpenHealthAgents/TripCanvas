@@ -36,7 +36,9 @@
         var stops = typeof flight.stops === "number"
           ? (flight.stops === 0 ? "Non-stop" : (flight.stops + " stop" + (flight.stops > 1 ? "s" : "")))
           : "Stops unknown";
-        var details = [flight.carrier || "Carrier unavailable", stops, flight.duration || "Duration unknown"].join(" • ");
+        var durationSummary = "Journey " + (flight.journey_duration || "unknown") +
+          " • Air time " + (flight.air_time || "unknown");
+        var details = [flight.carrier || "Carrier unavailable", stops, durationSummary].join(" • ");
         return (
           '<article class="flight">' +
           '<div class="flight-main">' +
