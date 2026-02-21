@@ -200,24 +200,10 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
     """Fetch hotel offers from Amadeus API."""
     if not amadeus:
         return []
-    try:
-        # Amadeus requires check-out strictly after check-in.
-        check_in = datetime.strptime(check_in_date, "%Y-%m-%d").date()
-        check_out = datetime.strptime(check_out_date, "%Y-%m-%d").date()
-        if check_out <= check_in:
-            check_out = check_in + timedelta(days=1)
 
-        response = amadeus.shopping.hotel_offers_search.get(
-            cityCode=city_code,
-            checkInDate=check_in.isoformat(),
-            checkOutDate=check_out.isoformat(),
-            adults=max(1, adults),
-            roomQuantity=1,
-            bestRateOnly=True,
-            view="FULL",
-        )
-        offers = []
-        for hotel_offer in response.data[:5]:
+    def _format_hotel_offers(raw_offers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        offers: List[Dict[str, Any]] = []
+        for hotel_offer in raw_offers[:5]:
             hotel_info = hotel_offer.get("hotel", {})
             offer_list = hotel_offer.get("offers", [])
             best_offer = offer_list[0] if offer_list else {}
@@ -226,7 +212,6 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
             total = _as_float(price_info.get("total"))
             currency = (price_info.get("currency") or "USD").upper()
             nightly = _as_float(avg_price_info.get("base"), fallback=0.0)
-
             offers.append(
                 {
                     "name": hotel_info.get("name") or "Unknown Hotel",
@@ -237,13 +222,64 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
                     "latitude": hotel_info.get("latitude"),
                     "longitude": hotel_info.get("longitude"),
                     "amenities": hotel_info.get("amenities", [])[:8],
-                    "cancellation": (best_offer.get("policies", {}).get("cancellation", {}).get("description", {}).get("text")),
+                    "cancellation": best_offer.get("policies", {}).get("cancellation", {}).get("description", {}).get("text"),
                     "booking_url": best_offer.get("self"),
                 }
             )
         return offers
-    except ResponseError as error:
-        print(f"Amadeus Error (Hotels): {error}")
+
+    try:
+        check_in = datetime.strptime(check_in_date, "%Y-%m-%d").date()
+        check_out = datetime.strptime(check_out_date, "%Y-%m-%d").date()
+    except ValueError:
+        print(f"Amadeus Error (Hotels): invalid date input check_in={check_in_date} check_out={check_out_date}")
+        return []
+
+    # Amadeus requires check-out strictly after check-in.
+    if check_out <= check_in:
+        check_out = check_in + timedelta(days=1)
+
+    try:
+        response = amadeus.shopping.hotel_offers_search.get(
+            cityCode=city_code,
+            checkInDate=check_in.isoformat(),
+            checkOutDate=check_out.isoformat(),
+            adults=max(1, adults),
+            roomQuantity=1,
+            bestRateOnly=True,
+            view="FULL",
+        )
+        return _format_hotel_offers(response.data)
+    except ResponseError as city_error:
+        city_details = getattr(getattr(city_error, "response", None), "result", None)
+        print(
+            "Amadeus Error (Hotels city search): "
+            f"cityCode={city_code} checkIn={check_in.isoformat()} checkOut={check_out.isoformat()} "
+            f"error={city_error} details={city_details}"
+        )
+
+    try:
+        hotel_ref = amadeus.reference_data.locations.hotels.by_city.get(cityCode=city_code)
+        hotel_ids = [h.get("hotelId") for h in hotel_ref.data if h.get("hotelId")]
+        if not hotel_ids:
+            return []
+        response = amadeus.shopping.hotel_offers_search.get(
+            hotelIds=",".join(hotel_ids[:20]),
+            checkInDate=check_in.isoformat(),
+            checkOutDate=check_out.isoformat(),
+            adults=max(1, adults),
+            roomQuantity=1,
+            bestRateOnly=True,
+            view="FULL",
+        )
+        return _format_hotel_offers(response.data)
+    except ResponseError as fallback_error:
+        fallback_details = getattr(getattr(fallback_error, "response", None), "result", None)
+        print(
+            "Amadeus Error (Hotels hotelIds fallback): "
+            f"cityCode={city_code} checkIn={check_in.isoformat()} checkOut={check_out.isoformat()} "
+            f"error={fallback_error} details={fallback_details}"
+        )
         return []
 
 async def get_activities(latitude: float, longitude: float):
