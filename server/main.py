@@ -709,10 +709,32 @@ def build_trip_request(
 @app.post("/v1/search_travel", response_model=SearchResponse, operation_id="search_travel")
 async def search_travel(request: TripRequest):
     request_id = str(uuid4())
-    destination_iata = _safe_iata(request.destination, "PAR")
+    destination_iata = request.destination.iata.upper() if request.destination.iata else None
     origin_iata = _safe_iata(request.origin, "LON")
-    destination_name = request.destination.city or destination_iata
+    destination_name = request.destination.city or destination_iata or "Destination"
     warnings: List[str] = []
+
+    if not destination_iata:
+        location = await get_location(destination_name)
+        if location and location.get("iataCode"):
+            destination_iata = location["iataCode"].upper()
+        else:
+            warnings.append(
+                f"Could not resolve destination IATA for '{destination_name}'. "
+                "Set destination.iata explicitly for better provider matches."
+            )
+
+    if not destination_iata:
+        response = SearchResponse(
+            request_id=request_id,
+            freshness_ts=utc_now_iso(),
+            flights=[],
+            hotels=[],
+            activities=[],
+            warnings=warnings,
+        )
+        search_store[request_id] = response
+        return response
 
     flights_raw = await search_flight_offers(
         origin_iata,
