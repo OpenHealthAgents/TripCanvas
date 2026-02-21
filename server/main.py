@@ -570,6 +570,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         )
         search_response = await search_travel(request)
         flights = search_response.flights
+        tool_warnings = list(search_response.warnings)
 
         hotels = []
         for hotel_offer in search_response.hotels:
@@ -577,7 +578,10 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 {
                     "name": hotel_offer.hotel_name,
                     "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400",
-                    "price": f"${hotel_offer.nightly_price.amount:.0f}/night" if hotel_offer.nightly_price else "Check for rates",
+                    "price": _format_nightly_price(
+                        hotel_offer.nightly_price.amount if hotel_offer.nightly_price else None,
+                        hotel_offer.total_price.currency,
+                    ),
                     "rating": f"{hotel_offer.star_rating:.1f}" if hotel_offer.star_rating else "N/A",
                 }
             )
@@ -588,6 +592,11 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         for activity in search_response.activities:
             if activity.title not in activity_pool:
                 activity_pool.append(activity.title)
+        if not activity_pool:
+            activity_pool = _fallback_activities_for_city(destination_name)
+            tool_warnings.append(
+                f"Using curated fallback activities for {destination_name} because live activities were unavailable."
+            )
 
         cursor = 0
         for i in range(1, days + 1):
@@ -613,7 +622,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
             "hotels": hotels,
             "itinerary": itinerary,
             "request_id": search_response.request_id,
-            "warnings": search_response.warnings,
+            "warnings": tool_warnings,
         }
 
         if flights:
@@ -690,6 +699,33 @@ CITY_IATA_FALLBACKS: Dict[str, str] = {
     "milan": "MIL",
 }
 
+CITY_ACTIVITY_FALLBACKS: Dict[str, List[str]] = {
+    "tokyo": [
+        "Senso-ji Temple and Asakusa walk",
+        "Shibuya Crossing and Hachiko Square",
+        "Meiji Shrine and Yoyogi Park",
+        "Tsukiji Outer Market food tour",
+        "TeamLab Planets digital art museum",
+        "Tokyo Skytree sunset view",
+    ],
+    "paris": [
+        "Louvre Museum highlights",
+        "Seine river walk and bookstalls",
+        "Montmartre and Sacre-Coeur",
+        "Eiffel Tower and Champ de Mars",
+        "Le Marais cafe and gallery hopping",
+        "Latin Quarter evening stroll",
+    ],
+    "london": [
+        "Westminster and St James's Park walk",
+        "British Museum highlights",
+        "South Bank and Borough Market",
+        "Tower Bridge and Tower of London",
+        "Covent Garden and Soho food walk",
+        "Greenwich observatory and riverside",
+    ],
+}
+
 
 def _safe_iata(location: LocationModel, fallback: str) -> str:
     if location.iata:
@@ -701,6 +737,37 @@ def _fallback_iata_for_city(city_name: Optional[str]) -> Optional[str]:
     if not city_name:
         return None
     return CITY_IATA_FALLBACKS.get(city_name.strip().lower())
+
+
+def _currency_symbol(currency: str) -> str:
+    return {
+        "USD": "$",
+        "EUR": "EUR ",
+        "GBP": "GBP ",
+        "JPY": "JPY ",
+    }.get((currency or "").upper(), f"{(currency or 'CUR').upper()} ")
+
+
+def _format_nightly_price(amount: Optional[float], currency: str) -> str:
+    if amount is None:
+        return "Check for rates"
+    symbol = _currency_symbol(currency)
+    return f"{symbol}{amount:,.0f}/night"
+
+
+def _fallback_activities_for_city(city_name: str) -> List[str]:
+    key = (city_name or "").strip().lower()
+    return CITY_ACTIVITY_FALLBACKS.get(
+        key,
+        [
+            f"Old town walking tour in {city_name}",
+            f"Local market and food tasting in {city_name}",
+            f"Top viewpoints around {city_name}",
+            f"Museum and cultural district visit in {city_name}",
+            f"Neighborhood cafe hopping in {city_name}",
+            f"Riverside or waterfront evening walk in {city_name}",
+        ],
+    )
 
 
 def default_departure_date() -> str:
