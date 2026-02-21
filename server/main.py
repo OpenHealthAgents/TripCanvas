@@ -423,7 +423,7 @@ async def list_resources() -> List[types.Resource]:
         types.Resource(
             uri="ui://widget/trip-plan.html",
             name="Trip Plan Widget",
-            mimeType="text/html+skybridge",
+            mimeType="text/html",
             description="The interactive UI for the travel planner",
             _meta=build_widget_meta()
         )
@@ -438,7 +438,7 @@ async def read_resource(uri: str) -> types.TextResourceContents | types.BlobReso
             
             return types.TextResourceContents(
                 uri=uri,
-                mimeType="text/html+skybridge",
+                mimeType="text/html",
                 text=html,
                 _meta=build_widget_meta()
             )
