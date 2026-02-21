@@ -454,6 +454,7 @@ async def list_tools() -> List[types.Tool]:
                 "type": "object",
                 "properties": {
                     "destination": {"type": "string", "description": "The city name (e.g., 'Paris', 'New York')"},
+                    "destination_iata": {"type": "string", "description": "Optional destination IATA/city code (e.g., 'TYO', 'PAR')"},
                     "origin": {"type": "string", "description": "The origin city IATA code (e.g., 'LON')", "default": "LON"},
                     "departure_date": {"type": "string", "description": "Departure date in YYYY-MM-DD format"},
                     "days": {"type": "integer", "description": "Number of days for the trip", "default": 3},
@@ -531,7 +532,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         keyword = arguments.get("keyword")
         location = await get_location(keyword) if keyword else None
         destination_city = keyword or "Paris"
-        destination_iata = location["iataCode"] if location else None
+        destination_iata = location["iataCode"] if location else _fallback_iata_for_city(destination_city)
         if location and location.get("name"):
             destination_city = location["name"]
         request = build_trip_request(
@@ -551,11 +552,14 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         origin = arguments.get("origin", "LON").upper()
         days = arguments.get("days", 3)
         departure_date = arguments.get("departure_date") or default_departure_date()
+        destination_iata_arg = arguments.get("destination_iata")
+        destination_iata = destination_iata_arg.upper() if destination_iata_arg else None
 
-        location = await get_location(destination_name)
-        destination_iata = location["iataCode"] if location else None
-        if location and location.get("name"):
-            destination_name = location["name"]
+        if not destination_iata:
+            location = await get_location(destination_name)
+            destination_iata = location["iataCode"] if location else _fallback_iata_for_city(destination_name)
+            if location and location.get("name"):
+                destination_name = location["name"]
 
         request = build_trip_request(
             origin_iata=origin,
@@ -673,11 +677,30 @@ app = FastAPI(
 search_store: Dict[str, SearchResponse] = {}
 itinerary_store: Dict[str, SaveItineraryRequest] = {}
 
+CITY_IATA_FALLBACKS: Dict[str, str] = {
+    "tokyo": "TYO",
+    "new york": "NYC",
+    "london": "LON",
+    "paris": "PAR",
+    "los angeles": "LAX",
+    "san francisco": "SFO",
+    "singapore": "SIN",
+    "dubai": "DXB",
+    "rome": "ROM",
+    "milan": "MIL",
+}
+
 
 def _safe_iata(location: LocationModel, fallback: str) -> str:
     if location.iata:
         return location.iata.upper()
     return fallback
+
+
+def _fallback_iata_for_city(city_name: Optional[str]) -> Optional[str]:
+    if not city_name:
+        return None
+    return CITY_IATA_FALLBACKS.get(city_name.strip().lower())
 
 
 def default_departure_date() -> str:
@@ -720,10 +743,16 @@ async def search_travel(request: TripRequest):
         if location and location.get("iataCode"):
             destination_iata = location["iataCode"].upper()
         else:
-            warnings.append(
-                f"Could not resolve destination IATA for '{destination_name}'. "
-                "Set destination.iata explicitly for better provider matches."
-            )
+            destination_iata = _fallback_iata_for_city(destination_name)
+            if destination_iata:
+                warnings.append(
+                    f"Resolved destination '{destination_name}' using fallback IATA '{destination_iata}'."
+                )
+            else:
+                warnings.append(
+                    f"Could not resolve destination IATA for '{destination_name}'. "
+                    "Set destination.iata explicitly for better provider matches."
+                )
 
     if not destination_iata:
         response = SearchResponse(
