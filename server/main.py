@@ -434,41 +434,6 @@ def build_widget_meta() -> dict:
         meta["openai/widgetDomain"] = host
     return meta
 
-
-def build_debug_widget_html() -> str:
-    return """<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TripCanvas Debug Widget</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
-      .card { margin: 16px; padding: 16px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
-      h1 { font-size: 18px; margin: 0 0 8px; }
-      pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: #f1f5f9; padding: 8px; border-radius: 8px; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1>Debug Widget Rendered</h1>
-      <div id="status">Waiting for tool output...</div>
-      <pre id="payload"></pre>
-    </div>
-    <script>
-      (function () {
-        var output = (window.openai && window.openai.toolOutput) || {};
-        var payload = output.structuredContent || output || {};
-        var status = document.getElementById('status');
-        var pre = document.getElementById('payload');
-        status.textContent = 'Widget loaded successfully.';
-        pre.textContent = JSON.stringify(payload, null, 2);
-      })();
-    </script>
-  </body>
-</html>
-"""
-
 @mcp_server.list_resources()
 async def list_resources() -> List[types.Resource]:
     return [
@@ -479,20 +444,12 @@ async def list_resources() -> List[types.Resource]:
             description="The interactive UI for the travel planner",
             _meta=build_widget_meta()
         ),
-        types.Resource(
-            uri="ui://widget/debug.html",
-            name="Debug Widget",
-            mimeType="text/html+skybridge",
-            description="Minimal widget used to validate rendering path",
-            _meta=build_widget_meta()
-        ),
     ]
 
 @mcp_server.read_resource()
 async def read_resource(uri: str):
     requested_uri = str(uri)
     normalized_uri = requested_uri.rstrip("/")
-    print(f"read_resource requested_uri={requested_uri!r} normalized_uri={normalized_uri!r}")
     if normalized_uri == "ui://widget/trip-plan.html":
         index_html_path = WIDGET_DIR / "index.html"
         if index_html_path.exists():
@@ -503,15 +460,6 @@ async def read_resource(uri: str):
                     meta=build_widget_meta(),
                 )
             ]
-        print(f"read_resource missing_widget_file path={index_html_path}")
-    if normalized_uri == "ui://widget/debug.html":
-        return [
-            ReadResourceContents(
-                content=build_debug_widget_html(),
-                mime_type="text/html+skybridge",
-                meta=build_widget_meta(),
-            )
-        ]
     raise ValueError(f"Resource not found: {requested_uri}")
 
 @mcp_server.list_tools()
@@ -562,18 +510,6 @@ async def list_tools() -> List[types.Tool]:
                     "keyword": {"type": "string", "description": "City name to search for activities"},
                 },
                 "required": ["keyword"],
-            },
-        ),
-        types.Tool(
-            name="debug_widget",
-            description="Minimal widget rendering test.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-            _meta={
-                **build_widget_meta(),
-                "openai/outputTemplate": "ui://widget/debug.html",
             },
         )
     ]
@@ -762,21 +698,6 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 "openai/toolInvocation/invoked": f"Trip to {destination_name} planned."
             }
         )
-    elif name == "debug_widget":
-        return types.CallToolResult(
-            content=[types.TextContent(type="text", text="Debug widget test executed.")],
-            structuredContent={
-                "ok": True,
-                "message": "If you can see this in a rendered card, widget rendering works.",
-                "ts": utc_now_iso(),
-            },
-            _meta={
-                "openai/outputTemplate": "ui://widget/debug.html",
-                "openai/toolInvocation/invoking": "Testing widget rendering...",
-                "openai/toolInvocation/invoked": "Debug widget test complete.",
-            },
-        )
-    
     else:
         raise ValueError(f"Unknown tool: {name}")
 
