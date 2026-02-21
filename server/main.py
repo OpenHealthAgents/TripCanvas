@@ -609,6 +609,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
             "hotels": hotels,
             "itinerary": itinerary,
             "request_id": search_response.request_id,
+            "warnings": search_response.warnings,
         }
 
         if flights:
@@ -733,6 +734,10 @@ async def search_travel(request: TripRequest):
             activities=[],
             warnings=warnings,
         )
+        print(
+            f"search_travel request_id={request_id} destination={destination_name} "
+            f"resolved_iata=None flights=0 hotels=0 activities=0 warnings={warnings}"
+        )
         search_store[request_id] = response
         return response
 
@@ -839,6 +844,11 @@ async def search_travel(request: TripRequest):
         hotels=hotels,
         activities=activities,
         warnings=warnings,
+    )
+    print(
+        f"search_travel request_id={request_id} destination={destination_name} "
+        f"resolved_iata={destination_iata} flights={len(flights)} hotels={len(hotels)} "
+        f"activities={len(activities)} warnings={warnings}"
     )
     search_store[request_id] = response
     return response
