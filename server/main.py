@@ -293,13 +293,19 @@ def build_widget_meta() -> dict:
         resource_domains.append(host)
     # Hotel images use Unsplash URLs.
     resource_domains.append("https://images.unsplash.com")
+    # Add additional image and media domains for robust image rendering
+    resource_domains.append("https://*.unsplash.com")
+    
     meta = {
         "openai/outputTemplate": "ui://widget/trip-plan.html",
         "openai/widgetAccessible": True,
         "openai/widgetDescription": "Interactive trip itinerary with hotels and day-by-day plan.",
+        "openai/widgetHasImages": True,  # Explicitly declare image support
         "openai/widgetCSP": {
             "connect_domains": [],
             "resource_domains": resource_domains,
+            "img_src": ["self", "https:", "data:"],  # Allow image sources
+            "object_src": ["none"],
         },
     }
     if host.startswith("http://") or host.startswith("https://"):
@@ -351,7 +357,12 @@ async def list_tools() -> List[types.Tool]:
             },
             _meta={
                 "openai/outputTemplate": "ui://widget/trip-plan.html",
-                "openai/widgetAccessible": True
+                "openai/widgetAccessible": True,
+                "openai/widgetHasImages": True,  # Enable image rendering
+                "openai/widgetCSP": {
+                    "img_src": ["self", "https:", "data:"],
+                    "resource_domains": ["https://images.unsplash.com"],
+                },
             },
             annotations={
                 "destructiveHint": False,

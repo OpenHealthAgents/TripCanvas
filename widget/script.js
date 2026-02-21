@@ -33,7 +33,8 @@
       .map(function (hotel) {
         return (
           '<article class="hotel">' +
-          '<img src="' + (hotel.image || "") + '" alt="' + (hotel.name || "Hotel") + '" />' +
+          '<img src="' + (hotel.image || "") + '" alt="' + (hotel.name || "Hotel") + '" ' +
+          'loading="lazy" data-image-source="hotel" style="display: block; width: 100%; height: 122px; object-fit: cover;" />' +
           '<div class="hotel-info">' +
           '<p class="hotel-name">' + (hotel.name || "Hotel") + "</p>" +
           '<div class="hotel-meta"><span>' + (hotel.price || "") + "</span><span>" +
@@ -85,6 +86,19 @@
         }
       });
     }
+
+    // Add image error handling with fallback placeholder
+    var images = document.querySelectorAll('.hotel img');
+    images.forEach(function (img) {
+      img.addEventListener('error', function () {
+        // If image fails to load, use a placeholder background
+        this.style.backgroundColor = '#e5eaf2';
+        this.style.backgroundImage = 'linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%)';
+        this.alt = 'Hotel image unavailable';
+      });
+      // Ensure images are visible by setting initial display
+      img.style.display = 'block';
+    });
   }
 
   var initial = normalizeData(window.openai && window.openai.toolOutput) || normalizeData(fromUrlParam());
