@@ -1109,6 +1109,11 @@ transport = SseServerTransport("/messages")
 async def healthz():
     return {"ok": True}
 
+
+@app.get("/")
+async def root():
+    return {"ok": True, "service": "TripCanvas MCP"}
+
 class StreamableHTTPASGIApp:
     async def __call__(self, scope, receive, send) -> None:
         await streamable_session_manager.handle_request(scope, receive, send)
