@@ -574,17 +574,31 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         flight_cards = []
         for flight in flights[:3]:
             first_segment = flight.segments[0] if flight.segments else None
+            last_segment = flight.segments[-1] if flight.segments else None
             if not first_segment:
                 continue
-            route = f"{first_segment.from_} -> {first_segment.to}"
+            route = f"{first_segment.from_} -> {last_segment.to if last_segment else first_segment.to}"
+            stop_count = max(0, len(flight.segments) - 1)
+            duration = _format_duration(
+                first_segment.depart_at,
+                last_segment.arrive_at if last_segment else first_segment.arrive_at,
+            )
+            if flight.refundable is True:
+                refundable_status = "Refundable"
+            elif flight.refundable is False:
+                refundable_status = "Non-refundable"
+            else:
+                refundable_status = "Refundability unknown"
             flight_cards.append(
                 {
                     "route": route,
                     "carrier": first_segment.carrier,
                     "depart_at": first_segment.depart_at,
-                    "arrive_at": first_segment.arrive_at,
+                    "arrive_at": last_segment.arrive_at if last_segment else first_segment.arrive_at,
                     "price": f"{flight.total_price.currency} {flight.total_price.amount:,.0f}",
-                    "refundable": flight.refundable,
+                    "stops": stop_count,
+                    "duration": duration,
+                    "refundable_status": refundable_status,
                 }
             )
 
@@ -789,6 +803,29 @@ def _fallback_activities_for_city(city_name: str) -> List[str]:
             f"Riverside or waterfront evening walk in {city_name}",
         ],
     )
+
+
+def _parse_iso_datetime(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        normalized = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _format_duration(depart_at: str, arrive_at: str) -> Optional[str]:
+    depart_dt = _parse_iso_datetime(depart_at)
+    arrive_dt = _parse_iso_datetime(arrive_at)
+    if not depart_dt or not arrive_dt:
+        return None
+    total_minutes = int((arrive_dt - depart_dt).total_seconds() // 60)
+    if total_minutes <= 0:
+        return None
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
 
 
 def default_departure_date() -> str:

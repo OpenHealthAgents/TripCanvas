@@ -33,15 +33,19 @@
 
     var flightsHtml = flights
       .map(function (flight) {
+        var stops = typeof flight.stops === "number"
+          ? (flight.stops === 0 ? "Non-stop" : (flight.stops + " stop" + (flight.stops > 1 ? "s" : "")))
+          : "Stops unknown";
+        var details = [flight.carrier || "Carrier unavailable", stops, flight.duration || "Duration unknown"].join(" • ");
         return (
           '<article class="flight">' +
           '<div class="flight-main">' +
           '<p class="flight-route">' + (flight.route || "Route unavailable") + "</p>" +
-          '<p class="flight-meta-line">' + (flight.carrier || "Carrier unavailable") + "</p>" +
+          '<p class="flight-meta-line">' + details + "</p>" +
           "</div>" +
           '<div class="flight-side">' +
           '<p class="flight-price">' + (flight.price || "") + "</p>" +
-          '<p class="flight-meta-line">' + (flight.refundable ? "Refundable" : "Non-refundable") + "</p>" +
+          '<p class="flight-meta-line">' + (flight.refundable_status || "Refundability unknown") + "</p>" +
           "</div>" +
           "</article>"
         );
