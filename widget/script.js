@@ -23,7 +23,7 @@
     if (!root) return;
 
     if (!data) {
-      root.innerHTML = '<div class="empty">No trip data available.</div>';
+      root.innerHTML = '<div class="loading">Processing your request...</div>';
       return;
     }
 
