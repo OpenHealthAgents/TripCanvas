@@ -80,20 +80,20 @@ Restart the Python server after setting this.
 - `POST /v1/save_itinerary`
 - `GET /v1/get_policy_summary/{offer_id}`
 
-## Deploy on Render (Recommended)
+## Deploy on DigitalOcean
 This avoids ngrok browser warning pages that block ChatGPT widget rendering.
 
 1. Push this repo to GitHub (already done).
-2. In Render, create a new **Web Service** from this repo.
-3. Render will detect `render.yaml` and deploy the Docker service.
-4. In Render service settings, set env vars:
+2. In DigitalOcean, create a new app or droplet deployment for this repo.
+3. Build and run this service using the included `Dockerfile`.
+4. Set env vars in DigitalOcean:
    - `AMADEUS_API_KEY`
    - `AMADEUS_API_SECRET`
-   - `APP_HOST` = your Render service URL, e.g. `https://tripcanvas-mcp.onrender.com`
-5. Redeploy after setting env vars.
+   - `APP_HOST` = your public DigitalOcean URL (for example: `https://api.tripcanvas.site`)
+5. Restart/redeploy the service after setting env vars.
 
 Use this MCP endpoint in ChatGPT:
-- `https://<your-render-domain>/mcp`
+- `https://<your-domain>/mcp`
 
 Use this REST base URL for integrations:
 - `https://www.api.tripcanvas.site`

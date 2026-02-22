@@ -634,7 +634,6 @@ async def lifespan(_app: FastAPI):
 def _openapi_server_url() -> str:
     return (
         os.getenv("APP_HOST", "").rstrip("/")
-        or os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
         or "http://localhost:8000"
     )
 
