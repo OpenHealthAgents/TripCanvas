@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.server.lowlevel.helper_types import ReadResourceContents
 import mcp.types as types
 from starlette.responses import Response
 from dotenv import load_dotenv
@@ -201,28 +200,27 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
     """Fetch hotel offers from Amadeus API."""
     if not amadeus:
         return []
-
-    def _format_hotel_offers(raw_offers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        offers: List[Dict[str, Any]] = []
-        for hotel_offer in raw_offers[:5]:
+    try:
+        response = amadeus.shopping.hotel_offers_search.get(
+            cityCode=city_code,
+            checkInDate=check_in_date,
+            checkOutDate=check_out_date,
+            adults=max(1, adults),
+            roomQuantity=1,
+            bestRateOnly=True,
+            view="FULL",
+        )
+        offers = []
+        for hotel_offer in response.data[:5]:
             hotel_info = hotel_offer.get("hotel", {})
             offer_list = hotel_offer.get("offers", [])
             best_offer = offer_list[0] if offer_list else {}
             price_info = best_offer.get("price", {})
             avg_price_info = price_info.get("variations", {}).get("average", {})
             total = _as_float(price_info.get("total"))
-            raw_currency = price_info.get("currency")
-            if raw_currency:
-                currency = str(raw_currency).upper()
-            elif city_code in {"PAR", "ORY", "CDG"}:
-                currency = "EUR"
-            elif city_code in {"TYO", "HND", "NRT"}:
-                currency = "JPY"
-            elif city_code in {"LON", "LHR", "LGW"}:
-                currency = "GBP"
-            else:
-                currency = "CUR"
+            currency = (price_info.get("currency") or "USD").upper()
             nightly = _as_float(avg_price_info.get("base"), fallback=0.0)
+
             offers.append(
                 {
                     "name": hotel_info.get("name") or "Unknown Hotel",
@@ -233,46 +231,13 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
                     "latitude": hotel_info.get("latitude"),
                     "longitude": hotel_info.get("longitude"),
                     "amenities": hotel_info.get("amenities", [])[:8],
-                    "cancellation": best_offer.get("policies", {}).get("cancellation", {}).get("description", {}).get("text"),
+                    "cancellation": (best_offer.get("policies", {}).get("cancellation", {}).get("description", {}).get("text")),
                     "booking_url": best_offer.get("self"),
                 }
             )
         return offers
-
-    try:
-        check_in = datetime.strptime(check_in_date, "%Y-%m-%d").date()
-        check_out = datetime.strptime(check_out_date, "%Y-%m-%d").date()
-    except ValueError:
-        print(f"Amadeus Error (Hotels): invalid date input check_in={check_in_date} check_out={check_out_date}")
-        return []
-
-    # Amadeus requires check-out strictly after check-in.
-    if check_out <= check_in:
-        check_out = check_in + timedelta(days=1)
-
-    try:
-        hotel_ref = amadeus.reference_data.locations.hotels.by_city.get(cityCode=city_code)
-        hotel_ids = [h.get("hotelId") for h in hotel_ref.data if h.get("hotelId")]
-        if not hotel_ids:
-            print(f"Amadeus Error (Hotels): no hotelIds found for cityCode={city_code}")
-            return []
-        response = amadeus.shopping.hotel_offers_search.get(
-            hotelIds=",".join(hotel_ids[:20]),
-            checkInDate=check_in.isoformat(),
-            checkOutDate=check_out.isoformat(),
-            adults=max(1, adults),
-            roomQuantity=1,
-            bestRateOnly=True,
-            view="FULL",
-        )
-        return _format_hotel_offers(response.data)
-    except ResponseError as fallback_error:
-        fallback_details = getattr(getattr(fallback_error, "response", None), "result", None)
-        print(
-            "Amadeus Error (Hotels hotelIds search): "
-            f"cityCode={city_code} checkIn={check_in.isoformat()} checkOut={check_out.isoformat()} "
-            f"error={fallback_error} details={fallback_details}"
-        )
+    except ResponseError as error:
+        print(f"Amadeus Error (Hotels): {error}")
         return []
 
 async def get_activities(latitude: float, longitude: float):
@@ -393,26 +358,13 @@ def utc_now_iso() -> str:
 
 # Serve raw widget files
 WIDGET_DIR = Path(__file__).parent.parent / "widget"
+WELL_KNOWN_DIR = Path(__file__).parent / ".well-known"
 
 def build_widget_html() -> str:
     """Load widget HTML and rewrite asset URLs to an absolute APP_HOST when configured."""
     index_html_path = WIDGET_DIR / "index.html"
     html = index_html_path.read_text(encoding="utf-8")
     host = os.getenv("APP_HOST", "").rstrip("/")
-
-    # Inline CSS/JS for maximum ChatGPT widget compatibility and to avoid stale external asset caching.
-    styles_path = WIDGET_DIR / "styles.css"
-    script_path = WIDGET_DIR / "script.js"
-    if styles_path.exists():
-        styles = styles_path.read_text(encoding="utf-8")
-        html = html.replace('<link rel="stylesheet" href="__WIDGET_HOST__/widget/styles.css" />', f"<style>{styles}</style>")
-        if host:
-            html = html.replace(f'<link rel="stylesheet" href="{host}/widget/styles.css" />', f"<style>{styles}</style>")
-    if script_path.exists():
-        script = script_path.read_text(encoding="utf-8")
-        html = html.replace('<script src="__WIDGET_HOST__/widget/script.js"></script>', f"<script>{script}</script>")
-        if host:
-            html = html.replace(f'<script src="{host}/widget/script.js"></script>', f"<script>{script}</script>")
     html = html.replace("__WIDGET_HOST__", host)
     return html
 
@@ -451,24 +403,23 @@ async def list_resources() -> List[types.Resource]:
             mimeType="text/html+skybridge",
             description="The interactive UI for the travel planner",
             _meta=build_widget_meta()
-        ),
+        )
     ]
 
 @mcp_server.read_resource()
-async def read_resource(uri: str):
-    requested_uri = str(uri)
-    normalized_uri = requested_uri.rstrip("/")
-    if normalized_uri == "ui://widget/trip-plan.html":
+async def read_resource(uri: str) -> types.TextResourceContents | types.BlobResourceContents:
+    if uri == "ui://widget/trip-plan.html":
         index_html_path = WIDGET_DIR / "index.html"
         if index_html_path.exists():
-            return [
-                ReadResourceContents(
-                    content=build_widget_html(),
-                    mime_type="text/html+skybridge",
-                    meta=build_widget_meta(),
-                )
-            ]
-    raise ValueError(f"Resource not found: {requested_uri}")
+            html = build_widget_html()
+            
+            return types.TextResourceContents(
+                uri=uri,
+                mimeType="text/html+skybridge",
+                text=html,
+                _meta=build_widget_meta()
+            )
+    raise ValueError(f"Resource not found: {uri}")
 
 @mcp_server.list_tools()
 async def list_tools() -> List[types.Tool]:
@@ -480,7 +431,6 @@ async def list_tools() -> List[types.Tool]:
                 "type": "object",
                 "properties": {
                     "destination": {"type": "string", "description": "The city name (e.g., 'Paris', 'New York')"},
-                    "destination_iata": {"type": "string", "description": "Optional destination IATA/city code (e.g., 'TYO', 'PAR')"},
                     "origin": {"type": "string", "description": "The origin city IATA code (e.g., 'LON')", "default": "LON"},
                     "departure_date": {"type": "string", "description": "Departure date in YYYY-MM-DD format"},
                     "days": {"type": "integer", "description": "Number of days for the trip", "default": 3},
@@ -488,7 +438,13 @@ async def list_tools() -> List[types.Tool]:
                 "required": ["destination"],
             },
             _meta={
-                **build_widget_meta(),
+                "openai/outputTemplate": "ui://widget/trip-plan.html",
+                "openai/widgetAccessible": True,
+                "openai/widgetHasImages": True,  # Enable image rendering
+                "openai/widgetCSP": {
+                    "img_src": ["self", "https:", "data:"],
+                    "resource_domains": ["https://images.unsplash.com"],
+                },
             },
             annotations={
                 "destructiveHint": False,
@@ -552,7 +508,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         keyword = arguments.get("keyword")
         location = await get_location(keyword) if keyword else None
         destination_city = keyword or "Paris"
-        destination_iata = location["iataCode"] if location else _fallback_iata_for_city(destination_city)
+        destination_iata = location["iataCode"] if location else None
         if location and location.get("name"):
             destination_city = location["name"]
         request = build_trip_request(
@@ -572,14 +528,11 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         origin = arguments.get("origin", "LON").upper()
         days = arguments.get("days", 3)
         departure_date = arguments.get("departure_date") or default_departure_date()
-        destination_iata_arg = arguments.get("destination_iata")
-        destination_iata = destination_iata_arg.upper() if destination_iata_arg else None
 
-        if not destination_iata:
-            location = await get_location(destination_name)
-            destination_iata = location["iataCode"] if location else _fallback_iata_for_city(destination_name)
-            if location and location.get("name"):
-                destination_name = location["name"]
+        location = await get_location(destination_name)
+        destination_iata = location["iataCode"] if location else None
+        if location and location.get("name"):
+            destination_name = location["name"]
 
         request = build_trip_request(
             origin_iata=origin,
@@ -590,39 +543,6 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         )
         search_response = await search_travel(request)
         flights = search_response.flights
-        tool_warnings = list(search_response.warnings)
-        flight_cards = []
-        for flight in flights[:3]:
-            first_segment = flight.segments[0] if flight.segments else None
-            last_segment = flight.segments[-1] if flight.segments else None
-            if not first_segment:
-                continue
-            route = f"{first_segment.from_} -> {last_segment.to if last_segment else first_segment.to}"
-            stop_count = max(0, len(flight.segments) - 1)
-            duration = _format_duration(
-                first_segment.depart_at,
-                last_segment.arrive_at if last_segment else first_segment.arrive_at,
-            )
-            air_time = _flight_air_time(flight.segments)
-            if flight.refundable is True:
-                refundable_status = "Refundable"
-            elif flight.refundable is False:
-                refundable_status = "Non-refundable"
-            else:
-                refundable_status = "Refundability unknown"
-            flight_cards.append(
-                {
-                    "route": route,
-                    "carrier": first_segment.carrier,
-                    "depart_at": first_segment.depart_at,
-                    "arrive_at": last_segment.arrive_at if last_segment else first_segment.arrive_at,
-                    "price": f"{flight.total_price.currency} {flight.total_price.amount:,.0f}",
-                    "stops": stop_count,
-                    "journey_duration": duration,
-                    "air_time": air_time,
-                    "refundable_status": refundable_status,
-                }
-            )
 
         hotels = []
         for hotel_offer in search_response.hotels:
@@ -630,10 +550,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 {
                     "name": hotel_offer.hotel_name,
                     "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400",
-                    "price": _format_nightly_price(
-                        hotel_offer.nightly_price.amount if hotel_offer.nightly_price else None,
-                        hotel_offer.total_price.currency,
-                    ),
+                    "price": f"${hotel_offer.nightly_price.amount:.0f}/night" if hotel_offer.nightly_price else "Check for rates",
                     "rating": f"{hotel_offer.star_rating:.1f}" if hotel_offer.star_rating else "N/A",
                 }
             )
@@ -644,15 +561,6 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         for activity in search_response.activities:
             if activity.title not in activity_pool:
                 activity_pool.append(activity.title)
-        if not activity_pool:
-            activity_pool = _fallback_activities_for_city(destination_name)
-            tool_warnings = [
-                w for w in tool_warnings
-                if w != "No live activities were returned from Amadeus for this query."
-            ]
-            tool_warnings.append(
-                f"Live activities were unavailable, so curated fallback activities are shown for {destination_name}."
-            )
 
         cursor = 0
         for i in range(1, days + 1):
@@ -675,11 +583,9 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
 
         trip_data = {
             "destination": destination_name,
-            "flights": flight_cards,
             "hotels": hotels,
             "itinerary": itinerary,
             "request_id": search_response.request_id,
-            "warnings": tool_warnings,
         }
 
         if flights:
@@ -706,6 +612,7 @@ async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
                 "openai/toolInvocation/invoked": f"Trip to {destination_name} planned."
             }
         )
+    
     else:
         raise ValueError(f"Unknown tool: {name}")
 
@@ -742,134 +649,11 @@ app = FastAPI(
 search_store: Dict[str, SearchResponse] = {}
 itinerary_store: Dict[str, SaveItineraryRequest] = {}
 
-CITY_IATA_FALLBACKS: Dict[str, str] = {
-    "tokyo": "TYO",
-    "new york": "NYC",
-    "london": "LON",
-    "paris": "PAR",
-    "los angeles": "LAX",
-    "san francisco": "SFO",
-    "singapore": "SIN",
-    "dubai": "DXB",
-    "rome": "ROM",
-    "milan": "MIL",
-}
-
-CITY_ACTIVITY_FALLBACKS: Dict[str, List[str]] = {
-    "tokyo": [
-        "Senso-ji Temple and Asakusa walk",
-        "Shibuya Crossing and Hachiko Square",
-        "Meiji Shrine and Yoyogi Park",
-        "Tsukiji Outer Market food tour",
-        "TeamLab Planets digital art museum",
-        "Tokyo Skytree sunset view",
-    ],
-    "paris": [
-        "Louvre Museum highlights",
-        "Seine river walk and bookstalls",
-        "Montmartre and Sacre-Coeur",
-        "Eiffel Tower and Champ de Mars",
-        "Le Marais cafe and gallery hopping",
-        "Latin Quarter evening stroll",
-    ],
-    "london": [
-        "Westminster and St James's Park walk",
-        "British Museum highlights",
-        "South Bank and Borough Market",
-        "Tower Bridge and Tower of London",
-        "Covent Garden and Soho food walk",
-        "Greenwich observatory and riverside",
-    ],
-}
-
 
 def _safe_iata(location: LocationModel, fallback: str) -> str:
     if location.iata:
         return location.iata.upper()
     return fallback
-
-
-def _fallback_iata_for_city(city_name: Optional[str]) -> Optional[str]:
-    if not city_name:
-        return None
-    return CITY_IATA_FALLBACKS.get(city_name.strip().lower())
-
-
-def _currency_symbol(currency: str) -> str:
-    return {
-        "USD": "$",
-        "EUR": "EUR ",
-        "GBP": "GBP ",
-        "JPY": "JPY ",
-    }.get((currency or "").upper(), f"{(currency or 'CUR').upper()} ")
-
-
-def _format_nightly_price(amount: Optional[float], currency: str) -> str:
-    if amount is None:
-        return "Check for rates"
-    symbol = _currency_symbol(currency)
-    return f"{symbol}{amount:,.0f}/night"
-
-
-def _fallback_activities_for_city(city_name: str) -> List[str]:
-    key = (city_name or "").strip().lower()
-    return CITY_ACTIVITY_FALLBACKS.get(
-        key,
-        [
-            f"Old town walking tour in {city_name}",
-            f"Local market and food tasting in {city_name}",
-            f"Top viewpoints around {city_name}",
-            f"Museum and cultural district visit in {city_name}",
-            f"Neighborhood cafe hopping in {city_name}",
-            f"Riverside or waterfront evening walk in {city_name}",
-        ],
-    )
-
-
-def _parse_iso_datetime(value: str) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        normalized = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-
-
-def _format_duration(depart_at: str, arrive_at: str) -> Optional[str]:
-    depart_dt = _parse_iso_datetime(depart_at)
-    arrive_dt = _parse_iso_datetime(arrive_at)
-    if not depart_dt or not arrive_dt:
-        return None
-    total_minutes = int((arrive_dt - depart_dt).total_seconds() // 60)
-    if total_minutes <= 0:
-        return None
-    hours = total_minutes // 60
-    minutes = total_minutes % 60
-    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
-
-
-def _format_minutes(total_minutes: int) -> str:
-    hours = total_minutes // 60
-    minutes = total_minutes % 60
-    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
-
-
-def _flight_air_time(segments: List[Segment]) -> Optional[str]:
-    if not segments:
-        return None
-    minutes_total = 0
-    for segment in segments:
-        depart_dt = _parse_iso_datetime(segment.depart_at)
-        arrive_dt = _parse_iso_datetime(segment.arrive_at)
-        if not depart_dt or not arrive_dt:
-            continue
-        seg_minutes = int((arrive_dt - depart_dt).total_seconds() // 60)
-        if seg_minutes > 0:
-            minutes_total += seg_minutes
-    if minutes_total <= 0:
-        return None
-    return _format_minutes(minutes_total)
 
 
 def default_departure_date() -> str:
@@ -902,42 +686,10 @@ def build_trip_request(
 @app.post("/v1/search_travel", response_model=SearchResponse, operation_id="search_travel")
 async def search_travel(request: TripRequest):
     request_id = str(uuid4())
-    destination_iata = request.destination.iata.upper() if request.destination.iata else None
+    destination_iata = _safe_iata(request.destination, "PAR")
     origin_iata = _safe_iata(request.origin, "LON")
-    destination_name = request.destination.city or destination_iata or "Destination"
+    destination_name = request.destination.city or destination_iata
     warnings: List[str] = []
-
-    if not destination_iata:
-        location = await get_location(destination_name)
-        if location and location.get("iataCode"):
-            destination_iata = location["iataCode"].upper()
-        else:
-            destination_iata = _fallback_iata_for_city(destination_name)
-            if destination_iata:
-                warnings.append(
-                    f"Resolved destination '{destination_name}' using fallback IATA '{destination_iata}'."
-                )
-            else:
-                warnings.append(
-                    f"Could not resolve destination IATA for '{destination_name}'. "
-                    "Set destination.iata explicitly for better provider matches."
-                )
-
-    if not destination_iata:
-        response = SearchResponse(
-            request_id=request_id,
-            freshness_ts=utc_now_iso(),
-            flights=[],
-            hotels=[],
-            activities=[],
-            warnings=warnings,
-        )
-        print(
-            f"search_travel request_id={request_id} destination={destination_name} "
-            f"resolved_iata=None flights=0 hotels=0 activities=0 warnings={warnings}"
-        )
-        search_store[request_id] = response
-        return response
 
     flights_raw = await search_flight_offers(
         origin_iata,
@@ -1043,11 +795,6 @@ async def search_travel(request: TripRequest):
         activities=activities,
         warnings=warnings,
     )
-    print(
-        f"search_travel request_id={request_id} destination={destination_name} "
-        f"resolved_iata={destination_iata} flights={len(flights)} hotels={len(hotels)} "
-        f"activities={len(activities)} warnings={warnings}"
-    )
     search_store[request_id] = response
     return response
 
@@ -1119,11 +866,6 @@ transport = SseServerTransport("/messages")
 async def healthz():
     return {"ok": True}
 
-
-@app.get("/")
-async def root():
-    return {"ok": True, "service": "TripCanvas MCP"}
-
 class StreamableHTTPASGIApp:
     async def __call__(self, scope, receive, send) -> None:
         await streamable_session_manager.handle_request(scope, receive, send)
@@ -1148,6 +890,10 @@ app.mount("/messages", transport.handle_post_message)
 # Serve raw widget assets (CSS/JS)
 if WIDGET_DIR.exists():
     app.mount("/widget", StaticFiles(directory=WIDGET_DIR, html=True), name="widget")
+
+# Serve domain verification and other standards files.
+if WELL_KNOWN_DIR.exists():
+    app.mount("/.well-known", StaticFiles(directory=WELL_KNOWN_DIR), name="well-known")
 
 if __name__ == "__main__":
     import uvicorn
