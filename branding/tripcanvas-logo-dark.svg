@@ -1,0 +1,29 @@
+<svg width="920" height="240" viewBox="0 0 920 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">TripCanvas Logo Dark</title>
+  <desc id="desc">TripCanvas logo variant optimized for dark backgrounds.</desc>
+
+  <defs>
+    <linearGradient id="tc-bg-dark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0EA5A3"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <linearGradient id="tc-dot-dark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A5F3FC"/>
+      <stop offset="1" stop-color="#99F6E4"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(24 24)">
+    <rect x="0" y="0" width="192" height="192" rx="44" fill="url(#tc-bg-dark)"/>
+    <path d="M48 56L96 40L146 56V132L96 164L48 132V56Z" fill="#F0FDFA"/>
+    <path d="M96 40V164" stroke="#CCFBF1" stroke-width="8" stroke-linecap="round"/>
+    <path d="M48 56L96 88L146 56" stroke="#0C4A6E" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>
+    <path d="M76 126C86 110 106 102 124 102" stroke="#F0FDFF" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="126" cy="102" r="8" fill="url(#tc-dot-dark)"/>
+  </g>
+
+  <g transform="translate(250 70)">
+    <text x="0" y="78" font-family="'Avenir Next', 'Segoe UI', sans-serif" font-size="84" font-weight="700" letter-spacing="0.5" fill="#E2E8F0">TripCanvas</text>
+    <text x="4" y="118" font-family="'Avenir Next', 'Segoe UI', sans-serif" font-size="24" font-weight="600" letter-spacing="3" fill="#67E8F9">PLAN • COMPARE • BOOK</text>
+  </g>
+</svg>

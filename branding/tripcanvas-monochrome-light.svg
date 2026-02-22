@@ -1,0 +1,16 @@
+<svg width="920" height="240" viewBox="0 0 920 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">TripCanvas Monochrome Light</title>
+  <desc id="desc">Monochrome TripCanvas logo for light backgrounds.</desc>
+  <g transform="translate(24 24)">
+    <rect x="0" y="0" width="192" height="192" rx="44" fill="#0F172A"/>
+    <path d="M48 56L96 40L146 56V132L96 164L48 132V56Z" fill="#FFFFFF"/>
+    <path d="M96 40V164" stroke="#CBD5E1" stroke-width="8" stroke-linecap="round"/>
+    <path d="M48 56L96 88L146 56" stroke="#475569" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+    <path d="M76 126C86 110 106 102 124 102" stroke="#E2E8F0" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="126" cy="102" r="8" fill="#FFFFFF"/>
+  </g>
+  <g transform="translate(250 70)">
+    <text x="0" y="78" font-family="'Avenir Next', 'Segoe UI', sans-serif" font-size="84" font-weight="700" letter-spacing="0.5" fill="#0F172A">TripCanvas</text>
+    <text x="4" y="118" font-family="'Avenir Next', 'Segoe UI', sans-serif" font-size="24" font-weight="600" letter-spacing="3" fill="#334155">PLAN • COMPARE • BOOK</text>
+  </g>
+</svg>
