@@ -211,7 +211,17 @@ async def get_hotels(city_code: str, check_in_date: str, check_out_date: str, ad
             price_info = best_offer.get("price", {})
             avg_price_info = price_info.get("variations", {}).get("average", {})
             total = _as_float(price_info.get("total"))
-            currency = (price_info.get("currency") or "USD").upper()
+            raw_currency = price_info.get("currency")
+            if raw_currency:
+                currency = str(raw_currency).upper()
+            elif city_code in {"PAR", "ORY", "CDG"}:
+                currency = "EUR"
+            elif city_code in {"TYO", "HND", "NRT"}:
+                currency = "JPY"
+            elif city_code in {"LON", "LHR", "LGW"}:
+                currency = "GBP"
+            else:
+                currency = "CUR"
             nightly = _as_float(avg_price_info.get("base"), fallback=0.0)
             offers.append(
                 {
