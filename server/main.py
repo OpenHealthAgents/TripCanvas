@@ -410,16 +410,13 @@ async def list_resources() -> List[types.Resource]:
 @mcp_server.read_resource()
 async def read_resource(uri: str) -> types.TextResourceContents | types.BlobResourceContents:
     if uri == "ui://widget/trip-plan.html":
-        index_html_path = WIDGET_DIR / "index.html"
-        if index_html_path.exists():
-            html = build_widget_html()
-            
-            return types.TextResourceContents(
-                uri=uri,
-                mimeType="text/html+skybridge",
-                text=html,
-                _meta=build_widget_meta()
-            )
+        html = build_widget_html()
+        return types.TextResourceContents(
+            uri=uri,
+            mimeType="text/html+skybridge",
+            text=html,
+            _meta=build_widget_meta()
+        )
     raise ValueError(f"Resource not found: {uri}")
 
 @mcp_server.list_tools()
