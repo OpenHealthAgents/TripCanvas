@@ -1,6 +1,7 @@
 import json
 import os
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -361,6 +362,13 @@ def utc_now_iso() -> str:
 WIDGET_DIR = Path(__file__).parent.parent / "widget"
 WELL_KNOWN_DIR = Path(__file__).parent / ".well-known"
 
+
+@dataclass
+class ResourceReadResult:
+    content: str | bytes
+    mime_type: str | None = None
+    meta: dict[str, Any] | None = None
+
 def build_widget_html() -> str:
     """Load widget HTML and rewrite asset URLs to an absolute APP_HOST when configured."""
     index_html_path = WIDGET_DIR / "index.html"
@@ -409,14 +417,15 @@ async def list_resources() -> List[types.Resource]:
 
 @mcp_server.read_resource()
 async def read_resource(uri: str) -> types.TextResourceContents | types.BlobResourceContents:
-    if uri == "ui://widget/trip-plan.html":
+    if str(uri) == "ui://widget/trip-plan.html":
         html = build_widget_html()
-        return types.TextResourceContents(
-            uri=uri,
-            mimeType="text/html+skybridge",
-            text=html,
-            _meta=build_widget_meta()
-        )
+        return [
+            ResourceReadResult(
+                content=html,
+                mime_type="text/html+skybridge",
+                meta=build_widget_meta(),
+            )
+        ]
     raise ValueError(f"Resource not found: {uri}")
 
 @mcp_server.list_tools()
