@@ -13,6 +13,7 @@ from mcp.server.sse import SseServerTransport
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 import mcp.types as types
 from starlette.responses import Response
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from dotenv import load_dotenv
 from amadeus import Client, ResponseError, Location
 from pydantic import BaseModel, Field
@@ -654,6 +655,8 @@ app = FastAPI(
     lifespan=lifespan,
     servers=[{"url": _openapi_server_url()}],
 )
+app.router.redirect_slashes = False
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 search_store: Dict[str, SearchResponse] = {}
 itinerary_store: Dict[str, SaveItineraryRequest] = {}
