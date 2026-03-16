@@ -448,8 +448,8 @@ async def list_tools() -> List[types.Tool]:
             },
             annotations={
                 "destructiveHint": False,
-                "openWorldHint": False,
-                "readOnlyHint": True,
+                "openWorldHint": True,
+                "readOnlyHint": False,
             }
         ),
         types.Tool(
@@ -464,6 +464,11 @@ async def list_tools() -> List[types.Tool]:
                 },
                 "required": ["origin", "destination", "departure_date"],
             },
+            annotations={
+                "destructiveHint": False,
+                "openWorldHint": True,
+                "readOnlyHint": False,
+            }
         ),
         types.Tool(
             name="search_activities",
@@ -475,6 +480,11 @@ async def list_tools() -> List[types.Tool]:
                 },
                 "required": ["keyword"],
             },
+            annotations={
+                "destructiveHint": False,
+                "openWorldHint": True,
+                "readOnlyHint": False,
+            }
         )
     ]
 
